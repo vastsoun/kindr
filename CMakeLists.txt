@@ -28,6 +28,8 @@ cmake_minimum_required (VERSION 2.8)
 
 project(kindr)
 
+option(KINDR_DOC "Build Kindr documentation." FALSE)
+
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR})
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
 
@@ -81,7 +83,12 @@ if(BUILD_GTEST)
 endif()
 
 # Add Doxygen documentation
-add_subdirectory(doc/doxygen)
+if(KINDR_DOC)
+  add_subdirectory(doc/doxygen)
+endif()
+
+
+
 
 # Install catkin package.xml
 #install(FILES package.xml DESTINATION share/kindr)
