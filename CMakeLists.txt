@@ -1,3 +1,4 @@
+#=========================================================================================
 # Copyright (c) 2013, Christian Gehring, Hannes Sommer, Paul Furgale, Remo Diethelm
 # All rights reserved.
 #
@@ -22,41 +23,47 @@
 # HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#=========================================================================================
+cmake_minimum_required(VERSION 3.10)
+project(kindr VERSION 1.0.1 LANGUAGES CXX)
 
-# Project configuration
-cmake_minimum_required (VERSION 2.8)
+# CMake helper modules
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
 
-project(kindr)
+#==
+# Options
+#==
 
-option(KINDR_DOC "Build Kindr documentation." FALSE)
+option(KINDR_DOC "Build Kindr documentation." OFF)
 
-set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR})
-set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
+#==
+# Dependencies
+#==
 
+# Add the helper CMake scripts for finding dependencies
+set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake" ${CMAKE_MODULE_PATH})
+
+# Eigen: A C++ template library for linear algebra
 find_package(Eigen REQUIRED)
-include_directories(include)
-include_directories(${EIGEN_INCLUDE_DIR})
-
-# Ensure Eigen version is at least 3.2
-if(${EIGEN_WORLD_VERSION} LESS "3" OR (${EIGEN_WORLD_VERSION} EQUAL "3" AND 
-   ${EIGEN_MAJOR_VERSION} LESS "2"))
-  message(FATAL_ERROR "Eigen must be of version 3.2 or higher. Detected version 
-          ${EIGEN_WORLD_VERSION}.${EIGEN_MAJOR_VERSION}.${EIGEN_MINOR_VERSION}")
-else()
- message(STATUS "Using Eigen of version ${EIGEN_WORLD_VERSION}.${EIGEN_MAJOR_VERSION}.${EIGEN_MINOR_VERSION} from ${EIGEN_INCLUDE_DIR}")
+if(EIGEN_FOUND)
+  message(STATUS "Eigen:")
+  message(STATUS "  Version: ${EIGEN_VERSION}")
+  message(STATUS "  Includes: ${EIGEN_INCLUDE_DIRS}")
 endif()
+
+#==
+# Build configuration
+#==
 
 # Noisily default to Release build
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   message(STATUS "Setting build type to 'Release' as none was specified.")
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
-  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
-    "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
+  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
 endif()
 
-add_definitions(-std=c++11)
-
-# Don't build tests if not specified.
+# Don't build tests if not specified
 if(NOT BUILD_TEST)
   message(STATUS "Setting build-tests to false as not specified.")
   set(BUILD_TEST false CACHE BOOL "Choose whether to build tests." FORCE)
@@ -64,22 +71,120 @@ if(NOT BUILD_TEST)
     "True" "False")
 endif()
 
+# Conditionally build gtest from source
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/gtest/" AND BUILD_TEST)
-	message(STATUS "Building GTests!")
-	option(BUILD_GTEST "build gtest" ON)
-	add_subdirectory(gtest gtest)
-	enable_testing()
+  message(STATUS "Building GTest!")
+  option(BUILD_GTEST "Build GTest from source." ON)
+  add_subdirectory(gtest gtest)
+  enable_testing()
 endif()
 
-# Add CMake module path
-set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
+#==
+# Build target libraries
+#==
 
+# The header-only library target
+add_library(${PROJECT_NAME} INTERFACE)
+target_include_directories(${PROJECT_NAME}
+  INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>
+    $<BUILD_INTERFACE:${EIGEN_INCLUDE_DIRS}>
+    $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include>
+)
+target_link_libraries(${PROJECT_NAME}
+  INTERFACE
+    pthread
+)
+target_compile_features(${PROJECT_NAME} INTERFACE cxx_std_11)
+target_compile_options(${PROJECT_NAME} INTERFACE "-Wall" "-Wextra" "-Wl,--no-as-needed" ${KINDR_COMPILE_OPTS})
 
-install(DIRECTORY include/kindr DESTINATION include)
+# Alias the common headers target within the joint DeepGait project namespace
+add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
+
+#==
+# Package targets
+#==
+
+install(TARGETS ${PROJECT_NAME}
+  EXPORT ${PROJECT_NAME}-targets
+  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+  INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+export(TARGETS ${PROJECT_NAME}
+  NAMESPACE kindr::
+  FILE ${PROJECT_NAME}-targets.cmake
+)
+
+install(EXPORT ${PROJECT_NAME}-targets
+  FILE ${PROJECT_NAME}-targets.cmake
+  NAMESPACE kindr::
+  DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}/cmake
+)
+
+#==
+# Package configuration
+#==
+
+configure_package_config_file(
+  ${CMAKE_CURRENT_LIST_DIR}/cmake/${PROJECT_NAME}-config.cmake.in
+  ${CMAKE_CURRENT_BINARY_DIR}/cmake/${PROJECT_NAME}-config.cmake
+  INSTALL_DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}/cmake
+)
+
+write_basic_package_version_file(cmake/${PROJECT_NAME}-config-version.cmake
+  VERSION ${PROJECT_VERSION}
+  COMPATIBILITY AnyNewerVersion
+)
+
+#==
+# Package installation
+#==
+
+install(
+  FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/cmake/${PROJECT_NAME}-config.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/cmake/${PROJECT_NAME}-config-version.cmake
+  DESTINATION
+    ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}/cmake
+)
+
+install(
+  DIRECTORY
+    ${CMAKE_CURRENT_LIST_DIR}/include/${PROJECT_NAME}
+  DESTINATION
+    ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+install(
+  FILES
+    ${CMAKE_CURRENT_LIST_DIR}/package.xml
+  DESTINATION
+    ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}
+)
+
+#==
+# Uninstallation
+#==
+
+configure_file(
+  "${CMAKE_CURRENT_LIST_DIR}/cmake/kindr-uninstall.cmake.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/cmake/kindr-uninstall.cmake"
+  IMMEDIATE @ONLY
+)
+
+if (NOT TARGET uninstall)
+  add_custom_target(uninstall COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake/kindr-uninstall.cmake)
+endif()
+
+#==
+# Build unit tests
+#==
 
 # Add unit tests
 if(BUILD_GTEST)
-	add_subdirectory(test)
+  add_subdirectory(test)
 endif()
 
 # Add Doxygen documentation
@@ -87,62 +192,5 @@ if(KINDR_DOC)
   add_subdirectory(doc/doxygen)
 endif()
 
+# EOF
 
-
-
-# Install catkin package.xml
-#install(FILES package.xml DESTINATION share/kindr)
-
-
-#=============================================
-# to allow find_package() on kindr
-#=============================================
-# 
-# the following case be used in an external project requiring kindr:
-#  ...
-#  find_package(kindr) 
-#  include_directories(${kindr_INCLUDE_DIRS}) 
-#  ...
-
-# NOTE: the following will support find_package for 1) local build (make) and 2) for installed files (make install)
-
-# 1- local build #
-
-# Register the local build in case one doesn't use "make install"
-export(PACKAGE kindr)
-
-# Create variable for the local build tree
-get_property(kindr_include_dirs DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY INCLUDE_DIRECTORIES)
-
-# Configure config file for local build tree
-configure_file(kindrConfig.cmake.in
-  "${PROJECT_BINARY_DIR}/kindrConfig.cmake" @ONLY)
-
-# 2- installation build #
-
-# Change the include location for the case of an install location
-set(kindr_include_dirs ${CMAKE_INSTALL_PREFIX}/include ${EIGEN_INCLUDE_DIR})
-
-
-# We put the generated file for installation in a different repository (i.e., ./CMakeFiles/)
-configure_file(kindrConfig.cmake.in
-  "${PROJECT_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/kindrConfig.cmake" @ONLY)
-
-install(FILES
-  "${PROJECT_BINARY_DIR}${CMAKE_FILES_DIRECTORY}/kindrConfig.cmake"
-  DESTINATION share/kindr/cmake COMPONENT dev)
-
-
-
-#=============================================
-# Add uninstall target
-#=============================================
-configure_file(
-    "${CMAKE_CURRENT_SOURCE_DIR}/cmake_uninstall.cmake.in"
-    "${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake"
-    IMMEDIATE @ONLY)
-
-if (NOT TARGET uninstall)
-  add_custom_target(uninstall
-    COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
-endif()
