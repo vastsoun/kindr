@@ -98,7 +98,7 @@ target_link_libraries(${PROJECT_NAME}
 target_compile_features(${PROJECT_NAME} INTERFACE cxx_std_11)
 target_compile_options(${PROJECT_NAME} INTERFACE "-Wall" "-Wextra" "-Wl,--no-as-needed" ${KINDR_COMPILE_OPTS})
 
-# Alias the common headers target within the joint DeepGait project namespace
+# Alias the common headers target within the joint kindr project namespace
 add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
 
 #==
